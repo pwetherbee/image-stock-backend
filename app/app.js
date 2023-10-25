@@ -65,7 +65,7 @@ app.post("/generate", async (req, res) => {
 
     db.run(
       `INSERT INTO images (url, prompt) VALUES (?, ?)`,
-      ["/static/" + uid + ".png", prompt],
+      [`/static/${uid}.png`, prompt],
       function (err) {
         if (err) {
           return console.log(err.message);
@@ -78,8 +78,8 @@ app.post("/generate", async (req, res) => {
     console.log(data);
 
     res.send({
-      image: "/static/image.png",
-      text: prompt,
+      image: `/static/${uid}.png`,
+      prompt,
     });
   } catch (error) {
     console.log(error);
