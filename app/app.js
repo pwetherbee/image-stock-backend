@@ -1,5 +1,6 @@
 const express = require("express");
 const axios = require("axios");
+const cors = require("cors");
 const { downloadImage } = require("./lib/download");
 const { initializeDatabase } = require("./lib/database");
 const sqlite3 = require("sqlite3").verbose();
@@ -7,6 +8,7 @@ require("dotenv").config();
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 const db = new sqlite3.Database(":memory:");
 
@@ -25,10 +27,13 @@ app.post("/generate", async (req, res) => {
   try {
     const { prompt } = req.body;
     console.log(req.body);
-    if (!prompt) {
+    // Validate prompt
+    if (!prompt || !typeof prompt === "string") {
       return res.status(400).send("Prompt is required");
     }
     console.log(`Generating image for prompt ${prompt}...`);
+
+    // Fetch image from Runpod API
     const { data } = await axios.post(
       "https://api.runpod.ai/v2/stable-diffusion-v1/runsync",
       {
@@ -53,7 +58,10 @@ app.post("/generate", async (req, res) => {
     // generate UID for image
     const uid = Math.floor(Math.random() * 1000000);
 
+    // download image to public folder
     await downloadImage(data.output[0].image, uid + ".png");
+
+    // insert image into database
 
     db.run(
       `INSERT INTO images (url, prompt) VALUES (?, ?)`,
@@ -69,7 +77,7 @@ app.post("/generate", async (req, res) => {
 
     console.log(data);
 
-    res.json({
+    res.send({
       image: "/static/image.png",
       text: prompt,
     });
@@ -80,6 +88,20 @@ app.post("/generate", async (req, res) => {
 });
 
 app.get("/images", (req, res) => {
+  const { search } = req.query;
+
+  if (typeof search === "string" && search.length > 0) {
+    const sql = "SELECT * FROM images WHERE prompt LIKE ?";
+    db.all(sql, ["%" + search + "%"], (err, rows) => {
+      if (err) {
+        throw err;
+      }
+      console.log(rows);
+      res.json(rows);
+    });
+    return;
+  }
+
   const sql = "SELECT * FROM images";
   db.all(sql, [], (err, rows) => {
     if (err) {
@@ -89,6 +111,7 @@ app.get("/images", (req, res) => {
   });
 });
 
+// Database cleanup
 process.on("SIGINT", () => {
   db.close((err) => {
     if (err) {
